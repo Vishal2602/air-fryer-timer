@@ -4,7 +4,7 @@
 
 | Environment | URL |
 |-------------|-----|
-| **Production** | https://air-fryer-timer-app.vercel.app |
+| **Production** | https://projlq9vh11766551950259.vercel.app |
 | **GitHub Repository** | https://github.com/Vishal2602/air-fryer-timer |
 | **Vercel Dashboard** | https://vercel.com/vishal2602s-projects/proj_lq9vh1_1766551950259 |
 
