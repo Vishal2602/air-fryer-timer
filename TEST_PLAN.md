@@ -167,7 +167,7 @@ This test plan covers the Air Fryer Timer React web application with focus on:
 | 4 | Review instructions | See "Before Cooking" steps (preheat, pat dry, season) | |
 | 5 | Review upcoming actions | See "@ 12 min - Flip" noted | |
 | 6 | Click "Start Cooking" | Timer view with 24:00 countdown starts | |
-| 7 | Observe timer for 30 seconds | Timer accurately shows 21:30 | |
+| 7 | Observe timer for 30 seconds | Timer accurately shows 23:30 | |
 | 8 | Wait for flip reminder (or test with shorter food) | Alert banner appears, voice says "Flip" | |
 | 9 | Dismiss alert | Banner closes, timer continues | |
 | 10 | Let timer complete | Completion message, "Done!" state | |
@@ -663,6 +663,168 @@ grep -r "TODO" src/
 ### Test Data Reset
 - Clear localStorage: `localStorage.clear()` in browser console
 - Reload page for fresh state
+
+---
+
+## Additional Critical Tests (Added During Code Review)
+
+### ACT-001: Voice Alert Race Conditions
+
+| Test ID | Scenario | Steps | Expected | Priority |
+|---------|----------|-------|----------|----------|
+| ACT-001a | Action alert + time warning collision | Cook food where flip time aligns with 5/1-min warning | Both alerts fire sequentially, not lost | High |
+| ACT-001b | Multiple actions at same minute | If 2 actions have same atMinute value | Both messages spoken | High |
+| ACT-001c | Alert during paused state | Pause timer right before action minute | Action doesn't fire while paused | High |
+| ACT-001d | Resume exactly at action minute | Pause at 11:59, resume at 12:00 (flip time) | Flip fires correctly | High |
+
+### ACT-002: Progress Ring Edge Cases
+
+| Test ID | Scenario | Expected | Priority |
+|---------|----------|----------|----------|
+| ACT-002a | Progress at 0% | Ring shows empty (just background circle) | Medium |
+| ACT-002b | Progress at 100% | Ring is fully filled | Medium |
+| ACT-002c | Progress calculation with pause | Ring percentage based on remaining/total, not elapsed | High |
+| ACT-002d | Very short food (6 min) | Progress updates visually every second | Medium |
+| ACT-002e | Very long food (28 min) | Progress ring doesn't overflow or break | Medium |
+
+### ACT-003: Search + Timer Interaction
+
+| Test ID | Scenario | Steps | Expected | Priority |
+|---------|----------|-------|----------|----------|
+| ACT-003a | Search while timer runs | Start cooking, then search from timer view | N/A - Can't search from timer view (correct) | Low |
+| ACT-003b | Timer state after back navigation | Start timer, go back, re-enter detail | Timer should be reset OR show warning | High |
+| ACT-003c | Same food re-selection during timer | If somehow possible to select same food | Handled gracefully | Medium |
+
+### ACT-004: firedActions State Management
+
+| Test ID | Scenario | Steps | Expected | Priority |
+|---------|----------|-------|----------|----------|
+| ACT-004a | firedActions resets on new cook | 1. Complete cook 2. Cook same food again | Actions fire again (firedActions cleared) | Critical |
+| ACT-004b | firedActions persists during pause | 1. Fire action 2. Pause 3. Resume | Same action doesn't re-fire | High |
+| ACT-004c | firedActions with very fast timer | Actions fire correctly at high speed | All actions fire at correct times | Medium |
+
+### ACT-005: Alert Banner Dismissal
+
+| Test ID | Scenario | Steps | Expected | Priority |
+|---------|----------|-------|----------|----------|
+| ACT-005a | Auto-dismiss timeout clears correctly | Let alert auto-dismiss | No orphaned timeouts | Medium |
+| ACT-005b | Manual dismiss cancels auto-dismiss | Click dismiss before 10s | No ghost dismiss later | High |
+| ACT-005c | New alert while old is showing | Fire 2 actions rapidly | New alert replaces old cleanly | High |
+| ACT-005d | Alert during completion | Action at minute 23, complete at 24 | Alert shows before completion screen | Medium |
+
+### ACT-006: Web Speech API Edge Cases
+
+| Test ID | Scenario | Steps | Expected | Priority |
+|---------|----------|-------|----------|----------|
+| ACT-006a | No voices available | Mock empty voices array | Silent fallback, no error | High |
+| ACT-006b | speechSynthesis.cancel() timing | Cancel immediately after speak | No partial audio | Medium |
+| ACT-006c | Voice toggle during utterance | Toggle voice off mid-speech | Speech stops immediately | High |
+| ACT-006d | iOS Safari auto-play restrictions | First voice without user gesture | May fail silently - test behavior | Critical |
+| ACT-006e | Browser loses focus during speech | Switch apps mid-utterance | Speech may continue or stop | Low |
+
+### ACT-007: Detail View Data Display
+
+| Test ID | Description | Expected | Priority |
+|---------|-------------|----------|----------|
+| ACT-007a | All food emojis render | No missing emoji (fallback image) | Medium |
+| ACT-007b | Long food names | Name doesn't overflow card | Medium |
+| ACT-007c | Temperature display | Shows "°F" consistently | High |
+| ACT-007d | Action preview format | Shows "@Xmin Action" format | High |
+| ACT-007e | Pro tip display | Tip shows in distinct styling | Medium |
+
+### ACT-008: Timer Completion Flow
+
+| Test ID | Scenario | Steps | Expected | Priority |
+|---------|----------|-------|----------|----------|
+| ACT-008a | Timer hits exactly 0 | Watch for off-by-one errors | Shows 00:00, then DONE | High |
+| ACT-008b | Completion voice timing | When exactly is "ready" spoken? | At 0 or slightly after | Medium |
+| ACT-008c | "Cook Something Else" button | Click after completion | Returns to select, state fully reset | High |
+| ACT-008d | Completion with voice off | Complete with voice disabled | Visual "DONE" only, no audio | High |
+| ACT-008e | After instructions visibility | Check after-cooking phase | "After" instructions highlighted | High |
+
+---
+
+## Performance Benchmarks
+
+### PB-001: Render Performance
+
+| Metric | Target | Test Method |
+|--------|--------|-------------|
+| Initial load (dev) | < 1s | Chrome DevTools Performance |
+| Initial load (prod) | < 500ms | Lighthouse |
+| Food grid render (26 items) | < 50ms | React Profiler |
+| Search filter response | < 16ms (60fps) | Input to render measurement |
+| Timer tick update | < 5ms | Continuous profiling |
+| Alert banner animation | 60fps | Animation inspector |
+
+### PB-002: Memory Usage
+
+| Scenario | Baseline | After 10min | After 30min |
+|----------|----------|-------------|-------------|
+| Idle on select screen | < 20MB | < 22MB | < 25MB |
+| Timer running | < 25MB | < 28MB | < 30MB |
+| Multiple start/stop cycles | Baseline | < 1.5x baseline | < 2x baseline |
+
+---
+
+## Automated Test Recommendations
+
+### Unit Test Files to Create
+
+```
+tests/
+├── utils/
+│   ├── formatTime.test.js      # UT-001
+│   ├── speech.test.js          # UT-003
+│   └── constants.test.js       # UT-004
+├── data/
+│   └── foods.test.js           # UT-002, FD-001, FD-002, FD-003
+├── components/
+│   ├── FoodCard.test.jsx
+│   ├── CategoryPills.test.jsx
+│   ├── ProgressRing.test.jsx
+│   ├── AlertBanner.test.jsx
+│   └── InstructionsPanel.test.jsx
+└── integration/
+    ├── foodSelection.test.jsx   # IT-001
+    ├── timerLifecycle.test.jsx  # IT-002
+    ├── voiceAlerts.test.jsx     # IT-003
+    └── midCookActions.test.jsx  # IT-004
+```
+
+### Recommended Testing Libraries
+
+- **Vitest**: Fast unit testing for Vite projects
+- **React Testing Library**: Component testing
+- **MSW**: Mock Service Worker for API mocking (if needed)
+- **Playwright**: E2E browser automation
+- **axe-core**: Accessibility testing
+- **web-audio-test-api**: For mocking Web Speech API
+
+---
+
+## Sign-Off Checklist
+
+### QA Sign-Off (Quinn)
+- [ ] All Critical tests passing
+- [ ] All High priority tests passing
+- [ ] 95%+ Medium priority tests passing
+- [ ] Edge cases documented and tested
+- [ ] No P0/P1 bugs open
+- [ ] Performance within targets
+- [ ] Accessibility basics verified
+
+### Developer Sign-Off
+- [ ] Unit tests written and passing
+- [ ] Integration tests written and passing
+- [ ] No known regressions
+- [ ] Code review completed
+
+### Product Sign-Off
+- [ ] UAT scenarios approved
+- [ ] User flow validated
+- [ ] Voice alerts work as expected
+- [ ] All 26 foods verified
 
 ---
 
